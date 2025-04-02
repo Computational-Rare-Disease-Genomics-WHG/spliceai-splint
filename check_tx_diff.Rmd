@@ -1,0 +1,264 @@
+---
+title: "R Notebook"
+output: 
+---
+
+```{r}
+library(data.table)
+library(ggplot2)
+theme_set(theme_classic())
+mane_gtf = rtracklayer::import('annotations/MANE.GRCh38.v1.0.ensembl_genomic.gff.gz')
+mane_dt = as.data.table(mane_gtf)
+
+mane_ann = fread('annotations/MANEv1.0.txt'  )
+spliceai_ann = fread('annotations/grch38.txt')
+```
+
+
+We found that the annotation file used for the precomputed scores included only a short isoform of DNMT3A which excludes this variant. This short isoform excludes 23.3% of the CDS of the MANE isoform, as well as y% of pathogenic ClinVar variants reported in this gene.
+
+```{r}
+precomp_dnmt3a_start = spliceai_ann[`#NAME` == 'DNMT3A', TX_START]
+precomp_dnmt3a_end = spliceai_ann[`#NAME` == 'DNMT3A', TX_END]
+
+mane_dt[type == 'CDS' & gene_name == 'DNMT3A' & end >  precomp_dnmt3a_end]
+sum(mane_dt[type == 'CDS' & gene_name == 'DNMT3A' & end >  precomp_dnmt3a_end, width]) / 
+  sum(mane_dt[type == 'CDS' & gene_name == 'DNMT3A', width])
+
+
+gnomad_dnmt3a = fread('gnomad_data/variants.csv', 
+                      col.names = c('clinvar_id', 'variant_id', 
+                                    'gold_start', 'clin_significance', 'review_status'))
+
+gnomad_dnmt3a[, var_pos := as.numeric(sapply(strsplit(variant_id, split = '-', fixed = TRUE), '[[', 2))]
+
+nrow(gnomad_dnmt3a[var_pos > precomp_dnmt3a_end  & clin_significance  %in% c("Likely pathogenic", "Pathogenic/Likely pathogenic", "Pathogenic")]) / nrow(gnomad_dnmt3a[ clin_significance  %in% c("Likely pathogenic", "Pathogenic/Likely pathogenic", "Pathogenic")])
+
+```
+
+# overall- get count of missing gens, missing exons (CDS/UTR?), changed CDS exon boundaries, changed UTR boundaries
+
+
+```{r}
+# annotate with gene names
+mane_ann = mane_dt[type == 'transcript', .(`#NAME` = transcript_id, gene_name)][mane_ann, on = .(`#NAME`)]
+
+
+#making table to find missing segemnts in spliceai annotations
+mane_ann_exons = mane_ann[, .(mane_exon_start = as.numeric(unlist(strsplit(EXON_START, split = ','))),
+                              mane_exon_end = as.numeric(unlist(strsplit(EXON_END, split = ',')))), by = .(transcript_id = `#NAME`, gene_name, CHROM = gsub('chr', '', CHROM), STRAND, mane_tx_start = TX_START, mane_tx_end = TX_END)]
+spliceai_ann_exons = spliceai_ann[, .(spliceai_exon_start = as.numeric(unlist(strsplit(EXON_START, split = ','))),
+                                      spliceai_exon_end = as.numeric(unlist(strsplit(EXON_END, split = ',')))), by = .(gene_name = `#NAME`, CHROM, STRAND, spliceai_tx_start = TX_START, spliceai_tx_end = TX_END)]
+
+
+# missing genes
+comp_ann_genes = unique(spliceai_ann_exons[, .(gene_name, CHROM, STRAND, spliceai_tx_start, spliceai_tx_end)])[unique(mane_ann_exons[, .(gene_name, CHROM, STRAND, mane_tx_start, mane_tx_end)]), on = .(gene_name, CHROM, STRAND)]
+#1621 missing genes
+missing_genes = comp_ann_genes[is.na(spliceai_tx_start), gene_name]
+
+
+# missing exons
+# annotate with whether they are CDS or UTR (CDS = includes any CDS, even it it's mixed and contains start/stop codon)
+# if start or end matches a CDS exon, annotate as CDS
+mane_exons = mane_dt[type == 'exon', .(transcript_id, gene_name, seqnames, strand, start, end, exon_number)]
+cds_regions = mane_dt[type == 'CDS', .(transcript_id, gene_name, seqnames, strand, start, end, CDS = 1)]
+
+cds_exons = rbind(cds_regions[mane_exons, on = .(transcript_id, gene_name, seqnames, strand, start)][CDS == 1],
+                  cds_regions[mane_exons, on = .(transcript_id, gene_name, seqnames, strand, end)][CDS == 1], fill= TRUE)
+cds_exons[is.na(i.end), start := i.start]
+cds_exons[is.na(i.start), end := i.end]
+cds_exons[, `:=` (i.end = NULL, i.start = NULL)]
+cds_exons = unique(cds_exons)
+mane_exons_info = cds_exons[mane_exons, on = .(transcript_id, gene_name, seqnames, strand, start, end)]
+mane_exons_info[is.na(CDS), CDS := 0]
+
+mane_exons_info = mane_exons_info[, .(transcript_id, gene_name, CHROM = gsub('chr', '', seqnames), STRAND = strand, mane_exon_start = start - 1, mane_exon_end= end, CDS, exon_number)]
+mane_exons_info[, exon_number := as.numeric(exon_number)]
+mane_exons_info[, nexon := max(exon_number), by = .(transcript_id)]
+```
+
+
+
+```{r}
+spliceai_ann_exons[, spliceai_ann_exon := 1]
+exon_comp = spliceai_ann_exons[mane_exons_info, on = .(gene_name, CHROM, STRAND, spliceai_exon_start = mane_exon_start, spliceai_exon_end = mane_exon_end)]
+# restrict to internal exons
+internal_exons_comp = exon_comp[exon_number != 1 & exon_number != nexon]
+#internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon)]
+# 1,100 don't have an exact match- how many of these have just one splice-junction changed?
+
+#number of genes containing CDS exons missing
+```
+
+
+# transcripts where boundaries have changed > 50 bp
+
+```{r}
+# changed UTR boundaries
+# comp_ann_genes[spliceai_tx_start != mane_tx_start & spliceai_tx_end == mane_tx_end]
+# comp_ann_genes[spliceai_tx_start == mane_tx_start & spliceai_tx_end != mane_tx_end]
+# comp_ann_genes[spliceai_tx_start != mane_tx_start & spliceai_tx_end != mane_tx_end]
+#comp_ann_genes[spliceai_tx_start == mane_tx_start & spliceai_tx_end == mane_tx_end]
+
+boundaries_comp = comp_ann_genes[!gene_name %in% missing_genes]
+
+boundaries_comp[, `:=` (tx_start_diff = abs(mane_tx_start - spliceai_tx_start), tx_end_diff = abs(mane_tx_end - spliceai_tx_end))]
+# 3,093 where a transcript boundary has changed by > 1000 bases
+#boundaries_comp[tx_start_diff > 1000 | tx_end_diff > 1000]
+```
+
+```{r}
+comparison_summary = data.table(category = c('missing_genes', 'missing_CDS_exons', 'boundary_changes', 'total_genes'),
+                                count = c(length(comp_ann_genes[is.na(spliceai_tx_start), gene_name]), 
+                                          length(unique(internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), gene_name])),
+                                          length(unique(boundaries_comp[tx_start_diff > 1000 | tx_end_diff > 1000, gene_name])),
+                                          length(unique(c(comp_ann_genes[is.na(spliceai_tx_start), gene_name], 
+                                                          internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), gene_name],
+                                                          boundaries_comp[tx_start_diff > 1000 | tx_end_diff > 1000, gene_name])))))
+comparison_summary[, category := factor(category, levels = c('missing_genes', 'missing_CDS_exons', 'boundary_changes', 'total_genes'))]
+
+
+
+
+
+ggplot(comparison_summary, aes(x = category, y = count, fill = category)) + 
+  geom_bar(stat = 'identity', width = 0.5) + 
+  xlab('') + scale_fill_brewer(type = 'qual', palette = 8) + 
+  theme(legend.position = 'None', 
+        axis.text.x = element_text(angle = 20, hjust = 1)) +
+  scale_x_discrete(labels = c('Missing genes', 'Genes with missing\nCDS exons', 
+                              'Genes with boundary\nchanges > 1000 bp', 'Total genes affected'))
+ggsave('figures/transcript_changes.pdf', height = 4, width = 4.5)
+```
+
+# create annotation bed file
+-a, --annotations file
+Bgzip-compressed and tabix-indexed file with annotations. The file can be VCF, BED, or a tab-delimited file with mandatory columns CHROM, POS (or, alternatively, FROM and TO), optional columns REF and ALT, and arbitrary number of annotation columns. BED files are expected to have the ".bed" or ".bed.gz" suffix (case-insensitive), otherwise a tab-delimited file is assumed. Note that in case of tab-delimited file, the coordinates POS, FROM and TO are one-based and inclusive. When REF and ALT are present, only matching VCF records will be annotated. If the END coordinate is present in the annotation file and given on command line as "-c ~INFO/END", then VCF records will be matched also by the INFO/END coordinate. If ID is present in the annotation file and given as "-c ~ID", then VCF records will be matched also by the ID column.  
+
+```{r}
+# missing gnes
+missing_genes = comp_ann_genes[is.na(spliceai_tx_start), .(CHROM, FROM = mane_tx_start, TO = mane_tx_end, 
+                                                           SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='missing gene')]
+
+missing_exons = internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), .(CHROM, FROM = spliceai_exon_start, TO = spliceai_exon_end, 
+                                                           SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='missing exon')]
+
+start_change = boundaries_comp[tx_start_diff > 1000, .(CHROM, FROM = pmin(spliceai_tx_start, mane_tx_start), 
+                                        TO = pmax(spliceai_tx_start, mane_tx_start) + 1000, 
+                                        SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='transcript boundary change')]
+end_change = boundaries_comp[tx_end_diff > 1000, .(CHROM, FROM = pmin(spliceai_tx_end, mane_tx_end) - 1000, 
+                                        TO = pmax(spliceai_tx_end, mane_tx_end), 
+                                        SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='transcript boundary change')]
+
+
+annotation_file = rbind(missing_genes, missing_exons, start_change, end_change)
+fwrite(annotation_file, 'tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+
+fwrite(annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
+       'tool/tool_annotation_files/precomp_supplement_annotation_chr.txt', sep = '\t', col.names = FALSE)
+
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt > tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
+system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
+system('tabix -p bed tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt')
+
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_chr.txt > tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
+system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
+system('tabix -p bed tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/precomp_supplement_annotation_chr.txt')
+
+```
+
+
+```{r}
+# indel annotation file- cover whole chromosomes
+# Chromosome lengths for GRCh38
+chrom_lengths <- data.table(
+  CHROM = c(as.character(1:22), "X", "Y"),
+  LENGTH = c(
+    248956422, 242193529, 198295559, 190214555, 181538259, 170805979,
+    159345973, 145138636, 138394717, 133797422, 135086622, 133275309,
+    114364328, 107043718, 101991189, 90338345, 83257441, 80373285,
+    58617616, 64444167, 46709983, 50818468, 156040895, 57227415
+  )
+)
+
+# Create the indel annotation file
+indel_annotation_file <- chrom_lengths[, .(
+  CHROM = CHROM,
+  FROM = 1,
+  TO = LENGTH,
+  SPLICEAI_RECOMMENDATION = 'update spliceAI scores',
+  REASON = 'large indel'
+)]
+
+fwrite(indel_annotation_file, 'tool/tool_annotation_files/indel_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+
+fwrite(indel_annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
+       'tool/tool_annotation_files/indel_annotation_chr.txt', sep = '\t', col.names = FALSE)
+
+
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_nochr.txt > tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
+system('bgzip tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
+system('tabix -p bed tool/tool_annotation_files/indel_annotation_nochr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/indel_annotation_nochr.txt')
+
+
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_chr.txt > tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
+system('bgzip tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
+system('tabix -p bed tool/tool_annotation_files/indel_annotation_chr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/indel_annotation_chr.txt')
+```
+
+
+```{r}
+# distance annotation file
+# criteria- 50-200 bp away from splice-site with ref score > 0.05 (or 0.02?)
+
+
+
+```
+
+
+
+
+# FIGURE 1A
+
+```{r}
+fig_1a = data.table(category = c('precomputed scores', 'updated annotations', 'updated annotations + distance'),
+                    variant_count = c(165, 180, 195))
+
+fig_1a[, increased_count := variant_count - 165]
+
+library(tidyverse)
+fig_1a[category != 'precomputed scores'] %>%
+  ggplot(aes(x = category, y = increased_count))  + 
+  geom_bar(stat = 'identity', width = 0.5, fill = 'lightgrey') + 
+  ylab('additional variants identified') + xlab('') +
+  scale_x_discrete(labels = c('updated transcript annotations', 'updated transcript annotations + \nincreased distance'))
+ggsave('figures/increased_variants.pdf', width= 5, height = 6)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

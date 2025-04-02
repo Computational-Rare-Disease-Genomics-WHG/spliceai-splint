@@ -1,0 +1,3 @@
+##INFO=<ID=SPLICEAI_RECOMMENDATION,Number=1,Type=String,Description='Update spliceAI scores'>
+##INFO=<ID=REASON,Number=1,Type=String,Description='Reason for recommendation'>
+

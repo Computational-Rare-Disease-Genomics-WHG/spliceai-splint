@@ -1,0 +1,16 @@
+*/.DS_Store
+.DS_Store
+.RData
+.Rhistory
+.Rproj.user
+annotations
+figures
+MANE_44_spliceAI_ref_scores
+spliceai_ref_splicesites
+gnomad_data
+data
+spliceai_precomp
+bed_tracks
+old_scripts
+*.Rproj
+tool/test_vcfs/gencode_UKB_vars.vcf.gz
