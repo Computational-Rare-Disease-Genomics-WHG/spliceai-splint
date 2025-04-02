@@ -14,3 +14,4 @@ bed_tracks
 old_scripts
 *.Rproj
 tool/test_vcfs/gencode_UKB_vars.vcf.gz
+tool/test_vcfs/*.spliceai_supplement.*

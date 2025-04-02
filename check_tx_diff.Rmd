@@ -5,7 +5,7 @@ output:
 
 ```{r}
 library(data.table)
-library(ggplot2)
+library(tidyverse)
 theme_set(theme_classic())
 mane_gtf = rtracklayer::import('annotations/MANE.GRCh38.v1.0.ensembl_genomic.gff.gz')
 mane_dt = as.data.table(mane_gtf)
@@ -88,6 +88,7 @@ internal_exons_comp = exon_comp[exon_number != 1 & exon_number != nexon]
 # 1,100 don't have an exact match- how many of these have just one splice-junction changed?
 
 #number of genes containing CDS exons missing
+internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon) & gene_name == 'MYRF' ]
 ```
 
 
@@ -140,9 +141,9 @@ Bgzip-compressed and tabix-indexed file with annotations. The file can be VCF, B
 missing_genes = comp_ann_genes[is.na(spliceai_tx_start), .(CHROM, FROM = mane_tx_start, TO = mane_tx_end, 
                                                            SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='missing gene')]
 
-missing_exons = internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), .(CHROM, FROM = spliceai_exon_start, TO = spliceai_exon_end, 
+# add padding around missing exons- variants in intorn surrounding exon likely to impact that exon
+missing_exons = internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), .(CHROM, FROM = spliceai_exon_start - 20, TO = spliceai_exon_end + 20, 
                                                            SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='missing exon')]
-
 start_change = boundaries_comp[tx_start_diff > 1000, .(CHROM, FROM = pmin(spliceai_tx_start, mane_tx_start), 
                                         TO = pmax(spliceai_tx_start, mane_tx_start) + 1000, 
                                         SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='transcript boundary change')]
@@ -159,12 +160,12 @@ fwrite(annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECO
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt > tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
 system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
-system('tabix -p bed tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt.gz')
+system('tabix -p bed -f tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt')
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_chr.txt > tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
 system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
-system('tabix -p bed tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt.gz')
+system('tabix -p bed -f tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/precomp_supplement_annotation_chr.txt')
 
 ```
@@ -200,23 +201,50 @@ fwrite(indel_annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEA
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_nochr.txt > tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
 system('bgzip tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
-system('tabix -p bed tool/tool_annotation_files/indel_annotation_nochr.sorted.txt.gz')
+system('tabix -p bed -f tool/tool_annotation_files/indel_annotation_nochr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/indel_annotation_nochr.txt')
 
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_chr.txt > tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
 system('bgzip tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
-system('tabix -p bed tool/tool_annotation_files/indel_annotation_chr.sorted.txt.gz')
+system('tabix -p bed -f tool/tool_annotation_files/indel_annotation_chr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/indel_annotation_chr.txt')
 ```
 
 
 ```{r}
 # distance annotation file
-# criteria- 50-200 bp away from splice-site with ref score > 0.05 (or 0.02?)
+# criteria- 50-200 bp away from unannotated splice-site with ref score > 0.05 (or 0.02?)
+ref_scores = fread('spliceai_ref_splicesites/MANE_44_spliceAI_ref_scores_0.01.txt.gz')
+ref_scores_0.02 = ref_scores[acceptor_prob >= 0.02 | donor_prob >= 0.02]
+ref_scores_0.02[, left_window := paste0(pos - 160, ';', pos - 50)]
+ref_scores_0.02[, right_window := paste0(pos + 50, ';', pos + 160)]
+
+distance_windows = ref_scores_0.02 %>%
+  select(`#chr`, left_window, right_window) %>%
+  pivot_longer(cols = c('left_window', 'right_window')) %>%
+  separate(value, into = c('FROM', 'TO'), sep = ';', convert = TRUE) %>%
+  rename(CHROM = `#chr`) %>%
+  select(CHROM, FROM, TO) %>%
+  mutate(SPLICEAI_RECOMMENDATION = "update spliceAI scores", REASON = "possible splicing-effect at distance > 50")
+setDT(distance_windows)
+
+fwrite(distance_windows, 'tool/tool_annotation_files/distance_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+
+fwrite(distance_windows[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
+       'tool/tool_annotation_files/distance_annotation_chr.txt', sep = '\t', col.names = FALSE)
 
 
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/distance_annotation_nochr.txt > tool/tool_annotation_files/distance_annotation_nochr.sorted.txt')
+system('bgzip tool/tool_annotation_files/distance_annotation_nochr.sorted.txt')
+system('tabix -p bed -f tool/tool_annotation_files/distance_annotation_nochr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/distance_annotation_nochr.txt')
 
+
+system('sort -k1,1 -k2,2n tool/tool_annotation_files/distance_annotation_chr.txt > tool/tool_annotation_files/distance_annotation_chr.sorted.txt')
+system('bgzip tool/tool_annotation_files/distance_annotation_chr.sorted.txt')
+system('tabix -p bed -f tool/tool_annotation_files/distance_annotation_chr.sorted.txt.gz')
+system('rm tool/tool_annotation_files/distance_annotation_chr.txt')
 ```
 
 
