@@ -1,0 +1,49 @@
+##fileformat=VCFv4.2
+##source=GeneratedVCF
+##reference=GRCh38
+##contig=<ID=1,length=248956422>
+##contig=<ID=2,length=242193529>
+##contig=<ID=3,length=198295559>
+##contig=<ID=4,length=190214555>
+##contig=<ID=7,length=159345973>
+##contig=<ID=9,length=138394717>
+##contig=<ID=10,length=133797422>
+##contig=<ID=11,length=135086622>
+##contig=<ID=12,length=133851895>
+##contig=<ID=15,length=101991189>
+##contig=<ID=16,length=90338345>
+##contig=<ID=18,length=80373285>
+##contig=<ID=19,length=58617616>
+##contig=<ID=20,length=64444167>
+##contig=<ID=21,length=46709983>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	6132116	.	ATGCCCACCCCCTTAC	A	.	.	.
+1	26767999	.	G	A	.	.	.
+1	237727120	.	T	C	.	.	.
+1	237727203	.	G	A	.	.	.
+1	244860463	.	G	GATATA	.	.	.
+2	25276150	.	C	A	.	.	.
+2	28799217	.	A	AATTC	.	.	.
+2	229791121	.	TACCGTGCCATA	T	.	.	.
+3	9470468	.	C	T	.	.	.
+3	9743143	.	T	TGC	.	.	.
+3	41224948	.	T	G	.	.	.
+3	41225023	.	A	AT	.	.	.
+3	41234169	.	C	CTTTTT	.	.	.
+4	157341338	.	A	G	.	.	.
+7	148807705	.	A	G	.	.	.
+9	121182929	.	C	CAAA	.	.	.
+9	127678531	.	A	AG	.	.	.
+10	129963548	.	CCGGTGAG	C	.	.	.
+11	57803616	.	TCCAGGAAC	T	.	.	.
+11	61780797	.	G	C	.	.	.
+12	13571965	.	CTGGAGAGAGAAAGACAG	C	.	.	.
+15	92974877	.	A	G	.	.	.
+16	8903264	.	G	A	.	.	.
+18	9195547	.	ATAGAG	A	.	.	.
+19	1425963	.	G	A	.	.	.
+19	35732866	.	CTGAGGACCTG	C	.	.	.
+19	42287294	.	T	C	.	.	.
+19	52222437	.	G	C	.	.	.
+20	50894416	.	CTT	C	.	.	.
+21	37490163	.	TTTCTC	T	.	.	.
