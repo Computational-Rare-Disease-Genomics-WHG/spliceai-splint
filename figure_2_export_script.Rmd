@@ -1,0 +1,69 @@
+---
+title: "R Notebook"
+output: 
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(ggpubr)
+theme_set(theme_classic())
+variant_set_scores = fread('figure_1_export_data.txt')
+
+
+panelA = variant_set_scores[precomp_maxdelta>0.01 | mane_50_maxdelta > 0.01 | mane_500_maxdelta > 0.01]  %>%
+  mutate(precomp_maxdelta = ifelse(is.infinite(precomp_maxdelta), 0, precomp_maxdelta),
+         color = ifelse(diagnostic_mane50 == 1 & diagnostic_precomp==0, 'new', 'none'))%>%
+  #mutate(color = ifelse(precomp_indel_missing == 1 & diagnostic_mane50 == 1 & diagnostic_precomp==0, 'indel',color ))%>%
+  select(ID, precomp_maxdelta, mane_50_maxdelta, mane_500_maxdelta, color) %>%
+  ggplot(aes(x = precomp_maxdelta, y = mane_50_maxdelta, color = color)) + geom_point( alpha = 0.8, size = 3) +
+  geom_vline(xintercept = 0.2, linetype = 'dashed')+
+  geom_hline(yintercept = 0.2, linetype = 'dashed')+
+  scale_color_manual(values = c('#384c6a', 'grey' )) +
+  ylab('Re-annotation max D')+ 
+  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20))
+```
+
+
+```{r}
+
+panelB= variant_set_scores[precomp_maxdelta>0.01 | mane_50_maxdelta > 0.01 | mane_500_maxdelta > 0.01]  %>%
+  mutate(precomp_maxdelta = ifelse(is.infinite(precomp_maxdelta), 0, precomp_maxdelta),
+         color = ifelse(diagnostic_mane500 == 1 & diagnostic_mane50 == 0, 'distance', 
+                        ifelse(diagnostic_mane50 == 1 & diagnostic_precomp == 0, 'transcript', 'none')))%>%
+  select(ID, precomp_maxdelta, mane_50_maxdelta, mane_500_maxdelta, color) %>%
+  ggplot(aes(x = precomp_maxdelta, y = mane_500_maxdelta, color = color)) + geom_point(alpha = 0.8, size = 3) +
+  geom_vline(xintercept = 0.2, linetype = 'dashed')+
+  geom_hline(yintercept = 0.2, linetype = 'dashed')+
+  scale_color_manual(values = c('#e38b2a', 'grey', '#384c6a')) + 
+  ylab('Increased distance max D')+ 
+  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20))
+```
+
+```{r}
+
+fig_1c = data.table(category = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'),
+                    variant_count = c(nrow(variant_set_scores[diagnostic_precomp==1]) - 1, 
+                                      nrow(variant_set_scores[diagnostic_mane50==1]) - 
+                                        nrow(variant_set_scores[diagnostic_mane50==1 & diagnostic_precomp==0 &precomp_indel_missing==0 ]),
+                                      nrow(variant_set_scores[diagnostic_mane50==1]),
+                                      nrow(variant_set_scores[diagnostic_mane500==1])))
+
+fig_1c[, increased_count := variant_count - nrow(variant_set_scores[diagnostic_precomp==1]) + 1]
+fig_1c[, category := factor(category, levels = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'))]
+
+panelC=fig_1c[category != 'precomputed scores'] %>%
+  ggplot(aes(x = category, y = increased_count, fill = category))  + 
+  geom_bar(stat = 'identity', width = 0.7) + 
+  ylab('additional variants') + xlab('') +
+  scale_fill_manual(values = c('#859bba', '#384c6a','#e38b2a' )) +
+  scale_y_continuous(expand = c(0,0)) + theme(legend.position = 'none', text = element_text(size = 20))
+
+#left = ggarrange(panelA, panelB, ncol = 1)
+
+#ggarrange(left, panelC, ncol = 2)
+
+ggarrange(panelA, panelB,panelC, ncol = 3)
+ggsave('figure2.pdf', width = 14, height= 4)
+```
+

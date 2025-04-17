@@ -15,3 +15,12 @@ old_scripts
 *.Rproj
 tool/test_vcfs/gencode_UKB_vars.vcf.gz
 tool/test_vcfs/*.spliceai_supplement.*
+/1kgenomes
+documents_20250416.zip
+*.gz
+*.tbi
+documents_20250416/figure_1_export_data.txt
+documents_20250416/figure2.png
+documents_20250416/figure2.pdf
+documents_20250416/figure1_draft.pdf
+documents_20250416/figure_2_export_data.txt
