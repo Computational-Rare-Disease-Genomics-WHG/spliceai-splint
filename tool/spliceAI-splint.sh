@@ -36,7 +36,7 @@ if [[ -z "$VCF_FILE" ]]; then
 fi
 
 # Check that the VCF header indicates GRCh38
-if ! zgrep -q "^##reference=GRCh38" "$VCF_FILE"; then
+if ! zgrep -q "GRCh38" "$VCF_FILE"; then
     echo "Error: Input VCF does not declare reference genome as GRCh38 in the header. SpliceAI-splint can only be run on GRCh38 VCFs"
     exit 1
 fi
