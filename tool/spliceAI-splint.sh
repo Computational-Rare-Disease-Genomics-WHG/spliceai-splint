@@ -147,6 +147,7 @@ tabix -p vcf "$FINAL_OUTPUT"
 # Clean up intermediate files
 echo "Cleaning up intermediate files..."
 rm -f ${ANNOTATED_FILES[@]} ${ANNOTATED_FILES[@]/%.vcf.gz/.vcf.gz.tbi}
+rm "$OUTPUT_DISTANCE" "$OUTPUT_DISTANCE.tbi" "$OUTPUT_SMALL_VARS" "$OUTPUT_SMALL_VARS.tbi"
 if [[ "$TEMP_GZIPPED" == true ]]; then
     echo "Cleaning up temporary gzipped file..."
     rm -f "$VCF_FILE" "$VCF_FILE.tbi"
