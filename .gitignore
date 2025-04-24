@@ -17,11 +17,14 @@ tool/test_vcfs/gencode_UKB_vars.vcf.gz
 tool/test_vcfs/*.spliceai_supplement.*
 /1kgenomes
 documents_20250416.zip
-*.gz
-*.tbi
 documents_20250416/figure_1_export_data.txt
 documents_20250416/figure2.png
 documents_20250416/figure2.pdf
 documents_20250416/figure1_draft.pdf
 documents_20250416/figure_2_export_data.txt
 /REF_issues
+tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.spliceai_supplement.vcf.gz
+tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.spliceai_supplement.vcf.gz.tbi
+tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.vcf.gz
+tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.vcf.gz.tbi
+*spliceai_splint.vcf.gz*
