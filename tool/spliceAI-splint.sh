@@ -98,16 +98,30 @@ bcftools filter -i '(ILEN < -4 | ILEN > 1)' $VCF_FILE | \
 tabix -p vcf "$OUTPUT_LARGE_INDEL"
 ANNOTATED_FILES+=("$OUTPUT_LARGE_INDEL")
 
+# add wrong ref
+if [[ ! -f "$WRONGREF_ANNOTATION_FILE" ]]; then
+    echo "Error: Annotation file '$WRONGREF_ANNOTATION_FILE' not found!"
+    exit 1
+fi
+echo "Annotating variants with wrong reference allele..."
+
+
+bcftools filter -e '(ILEN < -4 | ILEN > 1)' "$VCF_FILE" | \
+bcftools annotate --force -a "$WRONGREF_ANNOTATION_FILE" -h "$HEADER_FILE"  \
+    -c CHROM,FROM,TO,SPLICEAI_RECOMMENDATION,REASON \
+    -Oz -o "$OUTPUT_WRONGREF" 
+tabix -p vcf "$OUTPUT_WRONGREF"
+
 # add transcript changes
 if [[ ! -f "$SMALLVAR_ANNOTATION_FILE" ]]; then
     echo "Error: Annotation file '$SMALLVAR_ANNOTATION_FILE' not found!"
     exit 1
 fi
-echo "Annotating remaining variants if in transcript change regions..."
-bcftools filter -e '(ILEN < -4 | ILEN > 1)' "$VCF_FILE" | \
+
+echo "Annotating variants if in transcript change regions..."
 bcftools annotate --force -a "$SMALLVAR_ANNOTATION_FILE" -h "$HEADER_FILE" \
     -c CHROM,FROM,TO,SPLICEAI_RECOMMENDATION,REASON \
-    -Oz -o "$OUTPUT_SMALL_VARS"
+    -Oz -o "$OUTPUT_SMALL_VARS" "$OUTPUT_WRONGREF" 
 tabix -p vcf "$OUTPUT_SMALL_VARS"
 
 # add distance
@@ -122,19 +136,9 @@ bcftools annotate --force -a "$DISTANCE_ANNOTATION_FILE" -h "$HEADER_FILE" \
     -Oz -o "$OUTPUT_DISTANCE" "$OUTPUT_SMALL_VARS"
 tabix -p vcf "$OUTPUT_DISTANCE"
 
-if [[ ! -f "$WRONGREF_ANNOTATION_FILE" ]]; then
-    echo "Error: Annotation file '$WRONGREF_ANNOTATION_FILE' not found!"
-    exit 1
-fi
-echo "Annotating variants with wrong reference allele..."
 
 
-bcftools annotate --force -a "$WRONGREF_ANNOTATION_FILE" -h "$HEADER_FILE"  \
-    -c CHROM,FROM,TO,SPLICEAI_RECOMMENDATION,REASON \
-    -Oz -o "$OUTPUT_WRONGREF" "$OUTPUT_DISTANCE"
-tabix -p vcf "$OUTPUT_WRONGREF"
-
-ANNOTATED_FILES+=("$OUTPUT_WRONGREF")
+ANNOTATED_FILES+=("$OUTPUT_DISTANCE")
 
 # Combine and sort the final output VCF
 echo "Creating and indexing the final annotated VCF..."
@@ -147,7 +151,7 @@ tabix -p vcf "$FINAL_OUTPUT"
 # Clean up intermediate files
 echo "Cleaning up intermediate files..."
 rm -f ${ANNOTATED_FILES[@]} ${ANNOTATED_FILES[@]/%.vcf.gz/.vcf.gz.tbi}
-rm "$OUTPUT_DISTANCE" "$OUTPUT_DISTANCE.tbi" "$OUTPUT_SMALL_VARS" "$OUTPUT_SMALL_VARS.tbi"
+rm "$OUTPUT_WRONGREF" "$OUTPUT_WRONGREF.tbi" "$OUTPUT_SMALL_VARS" "$OUTPUT_SMALL_VARS.tbi"
 if [[ "$TEMP_GZIPPED" == true ]]; then
     echo "Cleaning up temporary gzipped file..."
     rm -f "$VCF_FILE" "$VCF_FILE.tbi"
