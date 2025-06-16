@@ -2,7 +2,7 @@
 
 This is a repository of scripts, documents, and data associated with the `SpliceAI-splint` tool and spliceAI reanalysis work performed in the Genomics England 100k Genomes Project research environment.
 
-The `spliceAI-splint` tool provides a lightweight, command-line method to rapidly annotate variants for which the precomputed SplieAI scores may not be adequate. This means users can re-run SpliceAI on only the subset of variants which are most likely to require updated scores.
+The `spliceAI-splint` tool provides a lightweight, command-line method to rapidly annotate variants for which the precomputed SpliceAI scores may not be adequate. This means users can re-run SpliceAI on only the subset of variants which are most likely to require updated scores.
 
 ---
 
