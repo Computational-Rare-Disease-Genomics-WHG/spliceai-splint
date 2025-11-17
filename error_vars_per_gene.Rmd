@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: 
+---
+
+
+```{r}
+library(data.table)
+library(tidyverse)
+```
+
+
+```{r}
+panelapp_genes_with_errors_info = fread('data/panelapp_genes_with_annotation_errors.txt') 
+
+errors_per_gene = fread('tool/panelapp_genes_anno_errors_reasons.txt.gz', 
+                        header = FALSE, 
+                        col.names = c('variant', 'recommendation','reason'))
+errors_per_gene=unique(errors_per_gene)
+errors_per_gene[, `:=` (chrom = sapply(strsplit(variant, split = '-', fixed = TRUE), '[[', 1),
+                        pos = as.numeric(sapply(strsplit(variant, split = '-', fixed = TRUE), '[[', 2)))]
+
+# Prepare errors_per_gene: Add 'start' and 'end' columns (same as 'pos')
+errors_per_gene[, `:=`(start = pos, end = pos)]
+
+# Set keys for foverlaps (must match column names)
+setDT(panelapp_genes_with_errors_info)
+panelapp_genes_with_errors_info[, chrom := gsub('chr','', CHROM)]
+setkey(panelapp_genes_with_errors_info, chrom, start, end)
+
+# Perform overlap join
+overlaps <- foverlaps(
+  errors_per_gene, 
+  panelapp_genes_with_errors_info,
+  by.x = c("chrom", "start", "end"),  # Columns in errors_per_gene
+  by.y = c("chrom", "start", "end"),  # Columns in panelapp_genes_with_errors_info
+  type = "within",  # Ensures pos is within [start, end]
+)
+
+
+# Remove temporary columns if needed
+overlaps[, c("i.start", "i.end", "CHROM", "pos", "reason") := NULL]
+
+result = overlaps[, .(error_vars = .N), by = .(chrom, start, end, gene_name)]
+# add rows for missing genes
+missing_genes = setdiff(panelapp_genes_with_errors_info$gene_name, result$gene_name)
+result = rbind(result, 
+      panelapp_genes_with_errors_info[gene_name %in% missing_genes, .(chrom, start, end, gene_name, 
+                                                                      error_vars = ((end-start)+1)*3)])
+result[, total_vars := ((end-start)+1)*3]
+result[, perc_error_vars := (error_vars/total_vars)*100]
+setorder(result, -perc_error_vars)
+
+
+
+ggplot(result, aes(x = perc_error_vars)) + geom_histogram(binwidth = 0.01)
+
+fwrite(result, 'data/errors_per_gene_panelapp_anno.tsv', sep = '\t')
+
+nrow(result[perc_error_vars>50])/nrow(result)
+
+quantile(result$perc_error_vars)
+panelapp_genes_with_errors_info[gene_name %in% setdiff(panelapp_genes_with_errors_info$gene_name, result$gene_name)]
+```
+
+

@@ -28,3 +28,15 @@ tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.spliceai_su
 tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.vcf.gz
 tool/ALL.wgs.shapeit2_integrated_snvindels_v2a.GRCh38.27022019.sites.vcf.gz.tbi
 *spliceai_splint.vcf.gz*
+*.vcf.gz*
+/tool/chromosome_results
+/tool/chromosome_results_wrongref
+test_vep_wrongref.vcf
+tool/annotation_summary.csv
+tool/annotation_summary.txt
+variant_info.txt
+*.pdf
+/clinvar
+*.gff
+*.gz
+tool/anno_error_region_file.txt

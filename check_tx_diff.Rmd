@@ -6,6 +6,7 @@ output:
 ```{r}
 library(data.table)
 library(tidyverse)
+library(ggpubr)
 theme_set(theme_classic())
 mane_gtf = rtracklayer::import('annotations/MANE.GRCh38.v1.0.ensembl_genomic.gff.gz')
 mane_dt = as.data.table(mane_gtf)
@@ -118,19 +119,106 @@ comparison_summary = data.table(category = c('missing_genes', 'missing_CDS_exons
                                                           boundaries_comp[tx_start_diff > 1000 | tx_end_diff > 1000, gene_name])))))
 comparison_summary[, category := factor(category, levels = c('missing_genes', 'missing_CDS_exons', 'boundary_changes', 'total_genes'))]
 
-
-
-
-
-ggplot(comparison_summary, aes(x = category, y = count, fill = category)) + 
-  geom_bar(stat = 'identity', width = 0.5) + 
-  xlab('') + scale_fill_brewer(type = 'qual', palette = 8) + 
-  theme(legend.position = 'None', 
-        axis.text.x = element_text(angle = 20, hjust = 1)) +
-  scale_x_discrete(labels = c('Missing genes', 'Genes with missing\nCDS exons', 
-                              'Genes with boundary\nchanges > 1000 bp', 'Total genes affected'))
-ggsave('figures/transcript_changes.pdf', height = 4, width = 4.5)
 ```
+
+```{r}
+# add wrong ref issues- genes that contain any region of liftover error, so any overlap with the annotation file
+wrongref_anno = fread('tool/tool_annotation_files/wrongref_annotation_chr.sorted.txt.gz', col.names = c('CHROM', 'TX_START', 'TX_END', 'recommendation', 'reason'))
+setkey(wrongref_anno, CHROM, TX_START, TX_END)
+setkey(mane_ann, CHROM, TX_START, TX_END)
+
+wrongref_anno_mane = foverlaps(mane_ann, wrongref_anno, type = 'any', nomatch = NULL)
+wrongref_anno_mane[, category := 'liftover error']
+```
+
+
+```{r}
+# New figure 1 with 3 bar plots
+
+# plot 1 - number of genes with annotation issues
+
+comparison_summary_data = rbind(comp_ann_genes[is.na(spliceai_tx_start), ] %>% mutate(category = 'missing gene'), 
+                                internal_exons_comp[!gene_name %in% missing_genes & is.na(spliceai_ann_exon), ] %>% mutate(category = 'missing CDS exon'),
+                                boundaries_comp[tx_start_diff > 1000 | tx_end_diff > 1000, ]%>% mutate(category = 'boundary changes'),
+                                wrongref_anno_mane, fill = TRUE)
+comparison_summary_data = comparison_summary_data[, .(gene_name, CHROM, STRAND, category, mane_tx_start, mane_tx_end, spliceai_tx_start, spliceai_tx_end, tx_start_diff, tx_end_diff,
+                            transcript_id, exon_number, spliceai_exon_start, spliceai_exon_end)]
+comparison_summary_plot = comparison_summary_data %>% select(gene_name, category) %>% distinct() %>% group_by(category) %>% tally() %>% setDT()
+comparison_summary_plot = rbind(comparison_summary_plot, data.table(category='total', n=length(unique(comparison_summary_data[!is.na(category), gene_name]))))
+comparison_summary_plot[, category := factor(category, levels = rev(c('missing gene', 'missing CDS exon', 'boundary changes', 'liftover error', 'total')))]
+comparison_summary_plot[, countlabel := scales::comma(n)]
+
+panelb = ggplot(comparison_summary_plot, aes(x = n, y = category, fill = category)) + 
+  geom_bar(stat = 'identity', width = 0.5) +  ylab('') +
+  xlab('Gene count') + scale_fill_brewer(type = 'qual', palette = 8)+
+  geom_text(aes(label = countlabel), 
+            position = position_stack(vjust = 1.2))+      
+  theme(legend.position = 'None',
+    panel.grid.major = element_line(color = "gray", size = 0.15),
+    panel.grid.minor = element_line(color = "lightgray", size = 0.1)) +
+  scale_y_discrete(labels = rev(c('Missing gene', 'Missing\nCDS exon', 
+                              'Gene boundary\nchange > 1000 bp', 'Liftover error', 'Total affected')))+
+  scale_x_continuous(labels = scales::comma, breaks = seq(0, 20000, 4000), expand = c(0,0))  + coord_cartesian(xlim = c(0, 10000))
+# plot 2 - overlap (proportion?) of panelApp genes with genes with annotation issues
+panelapp_genes = fread('panelapp_genes/GREEN_curated_mane_data.gff', col.names = c('chrom', 'a', 'type', 'start', 'end', 'b', 'strand', 'c', 'info', 'gene_name'))
+panelapp_genes = panelapp_genes[type == 'gene', ]
+comparison_summary_data_panelapp = comparison_summary_data[, .(gene_name, category)][panelapp_genes[, .(gene_name, chrom, start, end, strand)], on = .(gene_name)]
+panelapp_props = comparison_summary_data_panelapp %>% select(gene_name, category) %>% distinct() %>% group_by(category) %>% tally() %>% filter(!is.na(category)) %>% setDT()
+panelapp_props = rbind(panelapp_props, data.table(category='total', n=length(unique(comparison_summary_data_panelapp[!is.na(category), gene_name]))))
+panelapp_props[, total := length(unique(panelapp_genes$gene_name))]
+panelapp_props[, prop := n / total]
+panelapp_props[, category := factor(category, levels = rev(c('missing gene', 'missing CDS exon', 'boundary changes', 'liftover error', 'total')))]
+panelapp_props[, perc := scales::percent(prop)]
+
+panelapp_genes_with_annotation_errors = unique(comparison_summary_data_panelapp[!is.na(category)]$gene_name)
+
+panelapp_genes_with_errors_info = mane_ann[gene_name %in% panelapp_genes_with_annotation_errors] %>% group_by(gene_name, CHROM) %>% dplyr::summarise(start = min(TX_START), end = max(TX_END), .groups = "keep")
+fwrite(panelapp_genes_with_errors_info,'data/panelapp_genes_with_annotation_errors.txt', sep = '\t') 
+
+```
+
+
+```{r}
+panelc = ggplot(panelapp_props, aes(x = prop, y = category, fill = category)) + 
+  geom_bar(stat = 'identity', width = 0.5) +
+  xlab('panelApp green genes (%)') + scale_fill_brewer(type = 'qual', palette = 8) +
+  geom_text(aes(label = perc), 
+            position = position_stack(vjust = 1.2))+ 
+  theme(legend.position = 'None', axis.title.y = element_blank(), axis.text.y = element_blank(),
+    panel.grid.major = element_line(color = "gray", size = 0.15),
+    panel.grid.minor = element_line(color = "lightgray", size = 0.1)) +
+  scale_x_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), expand = c(0,0)) + coord_cartesian(xlim = c(0, 0.5))
+
+# plot 3 - proportion of theoretical SNVs in precomputed scores overlapping regions with annotation issues
+precomp_prop_mock = data.table(category = c('missing gene', 'missing CDS exon', 'boundary changes', 'liftover error'),
+                               n = c(188640584, 465516, 95651391, 7128272))
+precomp_info = fread('tool/annotation_summary.csv')
+
+precomp_prop = data.table(category = c('missing gene', 'missing CDS exon', 'boundary changes', 'liftover error'),
+                          reason = c('missing_gene','missing_exon', 'transcript_boundary_change', 'wrong_REF' ))
+precomp_prop = precomp_info[, .(reason, count)][precomp_prop, on = .(reason)]
+precomp_prop[, reason := NULL]
+precomp_prop = rbind(precomp_prop, data.table(category='total', count=188640584+95651391+465516+1669764))
+precomp_prop[, total := precomp_info[reason == 'TOTAL_ORIGINAL', count]]
+precomp_prop[, prop := count / total]
+precomp_prop[, category := factor(category, levels = rev(c('missing gene', 'missing CDS exon', 'boundary changes', 'liftover error', 'total')))]
+precomp_prop[, perc := scales::percent(prop)]
+
+paneld = ggplot(precomp_prop, aes(x = prop, y = category, fill = category)) + 
+  geom_bar(stat = 'identity', width = 0.5) +
+  geom_text(aes(label = perc), 
+            position = position_stack(vjust = 1.2))+ 
+  xlab('Theoretical SNVs (%)') + scale_fill_brewer(type = 'qual', palette = 8)  + 
+  theme(legend.position = 'None', axis.title.y = element_blank(), axis.text.y = element_blank(),
+    panel.grid.major = element_line(color = "gray", size = 0.15),
+    panel.grid.minor = element_line(color = "lightgray", size = 0.1)) +
+  scale_x_continuous(labels = scales::percent, breaks = seq(0, 1, 0.05), expand = c(0,0)) + coord_cartesian(xlim = c(0, 0.12))
+
+ggarrange(panelb, panelc, paneld, nrow = 1, widths = c(1.5, 1, 1))
+ggsave('figures/figure1_raw.pdf', width = 7, height = 3)
+```
+
+
 
 ```{r}
 fwrite(comp_ann_genes, 'data/comp_ann_genes.txt', sep = '\t')
@@ -140,23 +228,6 @@ fwrite(boundaries_comp, 'data/boundaries_comp.txt', sep = '\t')
 ```
 
 
-
-# FIGURE 1A
-
-```{r}
-fig_1a = data.table(category = c('precomputed scores', 'updated annotations', 'updated annotations + distance'),
-                    variant_count = c(165, 180, 195))
-
-fig_1a[, increased_count := variant_count - 165]
-
-library(tidyverse)
-fig_1a[category != 'precomputed scores'] %>%
-  ggplot(aes(x = category, y = increased_count))  + 
-  geom_bar(stat = 'identity', width = 0.5, fill = 'lightgrey') + 
-  ylab('additional variants identified') + xlab('') +
-  scale_x_discrete(labels = c('updated transcript annotations', 'updated transcript annotations + \nincreased distance'))
-ggsave('figures/increased_variants.pdf', width= 5, height = 6)
-```
 
 
 

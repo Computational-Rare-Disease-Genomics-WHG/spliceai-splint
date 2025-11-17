@@ -7,8 +7,10 @@ output:
 library(data.table)
 library(tidyverse)
 library(ggpubr)
+library(scales)
+
 theme_set(theme_classic())
-variant_set_scores = fread('figure_1_export_data.txt')
+variant_set_scores = fread('data/figure_2_export_data.txt')
 
 
 panelA = variant_set_scores[precomp_maxdelta>0.01 | mane_50_maxdelta > 0.01 | mane_500_maxdelta > 0.01]  %>%
@@ -21,7 +23,7 @@ panelA = variant_set_scores[precomp_maxdelta>0.01 | mane_50_maxdelta > 0.01 | ma
   geom_hline(yintercept = 0.2, linetype = 'dashed')+
   scale_color_manual(values = c('#384c6a', 'grey' )) +
   ylab('Re-annotation max D')+ 
-  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20))
+  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20),plot.margin = margin(1,1,1,1, "cm"))
 ```
 
 
@@ -37,33 +39,78 @@ panelB= variant_set_scores[precomp_maxdelta>0.01 | mane_50_maxdelta > 0.01 | man
   geom_hline(yintercept = 0.2, linetype = 'dashed')+
   scale_color_manual(values = c('#e38b2a', 'grey', '#384c6a')) + 
   ylab('Increased distance max D')+ 
-  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20))
+  xlab('Precomputed max D') + theme(legend.position = 'None', text = element_text(size = 20),plot.margin = margin(1,1,1,1, "cm"))
+```
+
+
+```{r}
+var_info = fread('variant_info.txt')
+
+missed_vars_reasons = var_info[, .(ID = Variant, reason_missed = `Reason missed`)][variant_set_scores[, .(ID, mane_500_maxdelta)], on = .(ID), nomatch = 0]
+missed_vars_reasons[, reason_missed := gsub(' ', '\n', reason_missed)]
+missed_vars_reasons[, reason_missed := factor(reason_missed, levels = c('Large\nIndel', 'Updated\nTranscript', 'Increased\nDistance'))]
+
+panelC = missed_vars_reasons %>% 
+  ggplot(aes(x = reason_missed, y = mane_500_maxdelta, color = reason_missed)) +
+  geom_boxplot(width = 0.5, outlier.size = 0) + geom_jitter(width = 0.2, size = 3)+
+  scale_color_manual(values = c('#859bba', '#384c6a','#e38b2a')) + 
+  ylab('max D') + xlab('') + theme(legend.position = 'None', text = element_text(size = 20),
+                                   plot.margin = margin(2.5,1,1,1, "cm"))
 ```
 
 ```{r}
 
-fig_1c = data.table(category = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'),
+fig_2d = data.table(category = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'),
                     variant_count = c(nrow(variant_set_scores[diagnostic_precomp==1]) - 1, 
                                       nrow(variant_set_scores[diagnostic_mane50==1]) - 
                                         nrow(variant_set_scores[diagnostic_mane50==1 & diagnostic_precomp==0 &precomp_indel_missing==0 ]),
                                       nrow(variant_set_scores[diagnostic_mane50==1]),
                                       nrow(variant_set_scores[diagnostic_mane500==1])))
 
-fig_1c[, increased_count := variant_count - nrow(variant_set_scores[diagnostic_precomp==1]) + 1]
-fig_1c[, category := factor(category, levels = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'))]
+fig_2d[, increased_count := variant_count - nrow(variant_set_scores[diagnostic_precomp==1]) + 1]
+fig_2d[, increased_prop := (variant_count - 165) / 165]
+fig_2d[, se := sqrt(increased_prop * (1 - increased_prop) / 165)]
+fig_2d[, category := factor(category, levels = c('precomputed scores', 'indels', '+annotation\nfile', '+distance\n500'))]
 
-panelC=fig_1c[category != 'precomputed scores'] %>%
-  ggplot(aes(x = category, y = increased_count, fill = category))  + 
+panelD=fig_2d[category != 'precomputed scores'] %>%
+  ggplot(aes(x = category, y = increased_prop, fill = category))  + 
   geom_bar(stat = 'identity', width = 0.7) + 
   ylab('additional variants') + xlab('') +
   scale_fill_manual(values = c('#859bba', '#384c6a','#e38b2a' )) +
-  scale_y_continuous(expand = c(0,0)) + theme(legend.position = 'none', text = element_text(size = 20))
+  scale_y_continuous(expand = c(0,0), breaks = seq(0, 0.2, 0.05), labels = percent) + 
+  theme(legend.position = 'none', text = element_text(size = 20),plot.margin = margin(2.5,1,1,1, "cm")) + 
+  coord_cartesian(ylim = c(0, 0.22)) +
+  geom_errorbar(
+    aes(ymin = increased_prop - se, ymax = increased_prop + se),
+    width = 0.2,  
+    color = "black",
+    linewidth = 0.7)
 
 #left = ggarrange(panelA, panelB, ncol = 1)
 
 #ggarrange(left, panelC, ncol = 2)
 
-ggarrange(panelA, panelB,panelC, ncol = 3)
-ggsave('figure2.pdf', width = 14, height= 4)
+#ggarrange(panelA, panelB,panelC, ncol = 3)
+#ggsave('figure2.pdf', width = 14, height= 4)
+#ggsave('figure2.png', width = 14, height= 4)
+
+```
+
+```{r}
+
+ggarrange(panelA, panelB,panelC, panelD, nrow = 2, ncol = 2)
+ggsave('figures/figure2_raw.pdf', width = 10, height= 10)
+```
+```{r}
+mean(c(78.14854682,
+77.87971458,
+77.80612245,
+77.55936162,
+76.73224979,
+76.51966627,
+76.43493086,
+76.38554217,
+76.33685559,
+76.3297445))
 ```
 
