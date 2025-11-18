@@ -39,7 +39,7 @@ Input is any .vcf 4.0 file, which may or may not be compressed. Output is a `.vc
 ## Usage
 
 ```bash
-./spliceai_supplement.sh -i <input.vcf.gz> [-o <output.vcf.gz>]
+./spliceAI-splint.sh -i <input.vcf.gz> [-o <output.vcf.gz>]
 ```
 
 The 'test_vcfs' folder contains two, minimal test .vcf files, one 'toy' dataset, and one containing the variants identified in our assocated analysis. These data may be used as an initial test to ensure the splice-splint tool is running as expected.

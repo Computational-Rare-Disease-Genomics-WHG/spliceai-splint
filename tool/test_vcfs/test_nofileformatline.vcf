@@ -1,0 +1,16 @@
+##source=TestVCF
+##contig=<ID=1,length=248956422>
+##contig=<ID=2,length=242193529>
+##contig=<ID=9,length=138394717>
+##contig=<ID=12,length=133851895>
+##contig=<ID=20,length=64444167>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	12345	.	G	A	.	.	.
+1	12345	.	AGTCTGGTCGG	A	.	.	.
+1	12345	.	AGT	A	.	.	.
+1	12345	.	A	AGTCTTG	.	.	.
+1	12345	.	A	AA	.	.	.
+9	127678531	.	A	AG	.	.	.
+12	8940359	.	A	G	.	.	.
+12	8940365	.	A	G	.	.	.
+20	50894416	.	CTT	C	.	.	.
