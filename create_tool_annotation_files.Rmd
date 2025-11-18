@@ -7,6 +7,7 @@ output:
 ```{r}
 library(data.table)
 library(tidyverse)
+options(scipen=999)
 ```
 
 # create annotation bed file
@@ -33,23 +34,31 @@ end_change = boundaries_comp[tx_end_diff > 1000, .(CHROM, FROM = pmin(spliceai_t
                                         SPLICEAI_RECOMMENDATION= 'update spliceAI scores', REASON='transcript boundary change')]
 
 
+
 annotation_file = rbind(missing_genes, missing_exons, start_change, end_change)
-#fwrite(annotation_file, 'tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt', sep = '\t', col.names = FALSE)
-annotation_file = rbind(missing_genes, missing_exons, start_change, end_change)
-fwrite(annotation_file, 'tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+
+
+
+annotation_file[, FROM := as.integer(FROM)]
+annotation_file[, TO   := as.integer(TO)]
+
+
+fwrite(annotation_file, 'tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt', sep = '\t', col.names = FALSE, quote= FALSE)
 
 fwrite(annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
-       'tool/tool_annotation_files/precomp_supplement_annotation_chr.txt', sep = '\t', col.names = FALSE)
+       'tool/tool_annotation_files/precomp_supplement_annotation_chr.txt', sep = '\t', col.names = FALSE, quote = FALSE)
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt > tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
-system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt >tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/precomp_supplement_annotation_nochr.txt')
+system('rm -f tool/tool_annotation_files/precomp_supplement_annotation_nochr.sorted.txt')
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/precomp_supplement_annotation_chr.txt > tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
-system('bgzip tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt > tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/precomp_supplement_annotation_chr.txt')
+system('rm -f tool/tool_annotation_files/precomp_supplement_annotation_chr.sorted.txt')
 
 ```
 
@@ -76,22 +85,28 @@ indel_annotation_file <- chrom_lengths[, .(
   REASON = 'large indel'
 )]
 
-fwrite(indel_annotation_file, 'tool/tool_annotation_files/indel_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+
+indel_annotation_file[, FROM := as.integer(FROM)]
+indel_annotation_file[, TO   := as.integer(TO)]
+
+fwrite(indel_annotation_file, 'tool/tool_annotation_files/indel_annotation_nochr.txt', sep = '\t', col.names = FALSE, quote = FALSE)
 
 fwrite(indel_annotation_file[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
-       'tool/tool_annotation_files/indel_annotation_chr.txt', sep = '\t', col.names = FALSE)
+       'tool/tool_annotation_files/indel_annotation_chr.txt', sep = '\t', col.names = FALSE, quote = FALSE)
 
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_nochr.txt > tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
-system('bgzip tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/indel_annotation_nochr.sorted.txt > tool/tool_annotation_files/indel_annotation_nochr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/indel_annotation_nochr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/indel_annotation_nochr.txt')
-
+system('rm -f tool/tool_annotation_files/indel_annotation_nochr.sorted.txt')
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/indel_annotation_chr.txt > tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
-system('bgzip tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/indel_annotation_chr.sorted.txt > tool/tool_annotation_files/indel_annotation_chr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/indel_annotation_chr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/indel_annotation_chr.txt')
+system('rm -f tool/tool_annotation_files/indel_annotation_chr.sorted.txt')
+
 ```
 
 
@@ -112,21 +127,28 @@ distance_windows = ref_scores_0.02 %>%
   mutate(SPLICEAI_RECOMMENDATION = "update spliceAI scores", REASON = "possible splicing-effect at distance > 50")
 setDT(distance_windows)
 
-fwrite(distance_windows, 'tool/tool_annotation_files/distance_annotation_nochr.txt', sep = '\t', col.names = FALSE)
+distance_windows[, FROM := as.integer(FROM)]
+distance_windows[, TO   := as.integer(TO)]
+
+fwrite(distance_windows, 'tool/tool_annotation_files/distance_annotation_nochr.txt', sep = '\t', col.names = FALSE, quote = FALSE)
 
 fwrite(distance_windows[, .(CHROM = paste0('chr', CHROM), FROM, TO, SPLICEAI_RECOMMENDATION, REASON)],
-       'tool/tool_annotation_files/distance_annotation_chr.txt', sep = '\t', col.names = FALSE)
+       'tool/tool_annotation_files/distance_annotation_chr.txt', sep = '\t', col.names = FALSE, quote = FALSE)
 
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/distance_annotation_nochr.txt > tool/tool_annotation_files/distance_annotation_nochr.sorted.txt')
-system('bgzip tool/tool_annotation_files/distance_annotation_nochr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/distance_annotation_nochr.sorted.txt > tool/tool_annotation_files/distance_annotation_nochr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/distance_annotation_nochr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/distance_annotation_nochr.txt')
+system('rm -f tool/tool_annotation_files/distance_annotation_nochr.sorted.txt')
 
 
 system('sort -k1,1 -k2,2n tool/tool_annotation_files/distance_annotation_chr.txt > tool/tool_annotation_files/distance_annotation_chr.sorted.txt')
-system('bgzip tool/tool_annotation_files/distance_annotation_chr.sorted.txt')
+system('bgzip -c tool/tool_annotation_files/distance_annotation_chr.sorted.txt> tool/tool_annotation_files/distance_annotation_chr.sorted.txt.gz')
 system('tabix -p bed -f tool/tool_annotation_files/distance_annotation_chr.sorted.txt.gz')
 system('rm tool/tool_annotation_files/distance_annotation_chr.txt')
+system('rm -f tool/tool_annotation_files/distance_annotation_chr.sorted.txt')
+
 ```
+
 
